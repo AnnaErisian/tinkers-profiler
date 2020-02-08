@@ -4,13 +4,27 @@ import c4.conarm.lib.materials.ArmorMaterialType;
 import c4.conarm.lib.materials.CoreMaterialStats;
 import c4.conarm.lib.materials.PlatesMaterialStats;
 import c4.conarm.lib.materials.TrimMaterialStats;
+import net.minecraft.block.Block;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.renderer.block.model.BakedQuad;
+import net.minecraft.client.renderer.block.model.IBakedModel;
+import net.minecraft.item.Item;
+import net.minecraft.item.ItemBlock;
+import net.minecraft.util.EnumFacing;
 import slimeknights.tconstruct.library.materials.*;
 import slimeknights.tconstruct.library.traits.ITrait;
+import slimeknights.tconstruct.world.block.BlockSlimeGrass;
+import slimeknights.tconstruct.world.block.BlockSlimeVine;
+import slimeknights.tconstruct.world.client.SlimeColorizer;
 
-import java.util.ArrayList;
-import java.util.HashMap;
+import javax.imageio.ImageIO;
+import java.awt.*;
+import java.awt.image.*;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.util.*;
 import java.util.List;
-import java.util.Map;
 import java.util.stream.Collectors;
 
 public class MatRow {
@@ -32,6 +46,7 @@ public class MatRow {
     public List<String> traitsCore;
     public List<String> traitsPlates;
     public List<String> traitsTrim;
+    private String image;
 
     public MatRow() {
         name = "";
@@ -69,6 +84,7 @@ public class MatRow {
         traitsCore = new ArrayList<>();
         traitsPlates = new ArrayList<>();
         traitsTrim = new ArrayList<>();
+        image = "";
 
     }
 
@@ -155,6 +171,7 @@ public class MatRow {
 
     public String toStringJSON() {
         return String.format("\n{\"name\": \"%s\"," +
+                        "\"image\": \"%s\"," +
                         "\"headdur\": \"%.2f\"," +
                         "\"headlevel\": \"%.2f\"," +
                         "\"headspeed\": \"%.2f\"," +
@@ -188,7 +205,7 @@ public class MatRow {
                         "\"traitsCore\": [%s]," +
                         "\"traitsPlates\": [%s]," +
                         "\"traitsTrim\": [%s]}",
-                name,
+                name, image,
                 headdur, headlevel, headspeed, headattack,
                 handlemod, handledur,
                 extradur,
@@ -262,6 +279,93 @@ public class MatRow {
 
     public static String traitIndexJSON() {
         return "{" + String.join(",", traitIndex.keySet().stream().map(s -> ("\"" + s + "\": " + traitIndex.get(s).toStringJSON())).collect(Collectors.toList())) + "}";
+    }
+
+
+    public void setImage(Material mat) {
+        IBakedModel model = Minecraft.getMinecraft().getRenderItem().getItemModelWithOverrides(mat.getRepresentativeItem(), null, null);
+        List<BakedQuad> quads = model.getQuads(null, null, 0L);
+        List<BakedQuad> quads_east = model.getQuads(null, EnumFacing.EAST, 0L);
+        int w = 0;
+        int h = 0;
+        int[] data = null;
+        if (quads_east.size() > 0) {
+            BakedQuad q = quads_east.get(0);
+            w = q.getSprite().getIconWidth();
+            h = q.getSprite().getIconHeight();
+            data = q.getSprite().getFrameTextureData(0)[0];
+        } else if (quads.size() > 0) {
+            BakedQuad q = quads.get(0);
+            w = q.getSprite().getIconWidth();
+            h = q.getSprite().getIconHeight();
+            data = q.getSprite().getFrameTextureData(0)[0];
+        }
+        data = Arrays.copyOf(data, data.length);
+
+        DataBufferInt buffer = new DataBufferInt(data, data.length);
+
+        int[] bandMasks = {0xFF0000, 0xFF00, 0xFF, 0xFF000000}; // ARGB (yes, ARGB, as the masks are R, G, B, A always) order
+        WritableRaster raster = Raster.createPackedRaster(buffer, w, h, w, bandMasks, null);
+
+        if(isSpecialRender(mat)) {
+            Color c = new Color(getRenderColor(mat));
+            for(int i = 0; i < raster.getWidth(); i++) {
+                for(int j = 0; j < raster.getHeight(); j++) {
+                    int[] pix = null;
+                    pix = raster.getPixel(i,j,pix);
+                    pix[0] = (int) Math.ceil(pix[0] * (c.getRed() / 255.0));
+                    pix[1] = (int) Math.ceil(pix[1] * (c.getGreen() / 255.0));
+                    pix[2] = (int) Math.ceil(pix[2] * (c.getBlue() / 255.0));
+                    raster.setPixel(i,j,pix);
+                }
+            }
+        }
+
+        ColorModel cm = ColorModel.getRGBdefault();
+        BufferedImage image = new BufferedImage(cm, raster, cm.isAlphaPremultiplied(), null);
+
+        this.image = imgToBase64String(image, "png");
+    }
+
+    private boolean isSpecialRender(Material mat) {
+//        return (mat.identifier.equals("wood"));
+        return (mat.identifier.equals("vine")) ||
+                (mat.identifier.equals("leaf")) ||
+                (mat.identifier.equals("slimevine_blue")) ||
+                (mat.identifier.equals("slimevine_purple")) ||
+                (mat.identifier.equals("slimeleaf_blue")) ||
+                (mat.identifier.equals("slimeleaf_purple")) ||
+                (mat.identifier.equals("slimeleaf_orange"));
+    }
+
+    private int getRenderColor(Material mat) {
+        if(mat.identifier.equals("slimevine_blue")) {
+            return SlimeColorizer.getColorStatic(BlockSlimeGrass.FoliageType.BLUE);
+        }
+        if(mat.identifier.equals("slimevine_purple")) {
+            return SlimeColorizer.getColorStatic(BlockSlimeGrass.FoliageType.PURPLE);
+        }
+        if(mat.identifier.equals("slimeleaf_blue")) {
+            return SlimeColorizer.getColorStatic(BlockSlimeGrass.FoliageType.BLUE);
+        }
+        if(mat.identifier.equals("slimeleaf_purple")) {
+            return SlimeColorizer.getColorStatic(BlockSlimeGrass.FoliageType.PURPLE);
+        }
+        if(mat.identifier.equals("slimeleaf_orange")) {
+            return SlimeColorizer.getColorStatic(BlockSlimeGrass.FoliageType.ORANGE);
+        }
+        return 0x2fa835;
+    }
+
+    public static String imgToBase64String(final RenderedImage img, final String formatName) {
+        final ByteArrayOutputStream os = new ByteArrayOutputStream();
+
+        try {
+            ImageIO.write(img, formatName, os);
+            return Base64.getEncoder().encodeToString(os.toByteArray());
+        } catch (final IOException ioe) {
+            throw new UncheckedIOException(ioe);
+        }
     }
 
     private class TraitSimple {
