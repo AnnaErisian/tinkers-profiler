@@ -1,3 +1,1 @@
-A set of integrations and some extra alloys for Tinker's Construct
-
-Relies on Tinker's Aether, The Betweenlands, Botania, Twilight Forest, NuclearCraft, Thermal Expansion, PlusTIC, Draconic Evolution, Tinker's Construct, and Constructs Armory.
+A simple set of utility items to print the tinkers material index to a file.  Also Requires ConArm, because this is for personal use and I don't care to make it optional yet.
